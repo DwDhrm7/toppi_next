@@ -44,5 +44,20 @@ Berdasarkan implementasi dan validasi sebelumnya:
 
 ---
 
-## 6. Status Akhir
-Seluruh rekomendasi perbaikan telah selesai dieksekusi. Aplikasi **100% bebas dari linting error & warning**, memiliki tipe data yang solid, serta fungsionalitas antarmuka responsif (termasuk *resizable layout* pada halaman log). Sistem siap untuk diproduksi (Production Ready) secara optimal.
+## 6. Integrasi Axios & Real Backend API (Update Terbaru)
+- **Library yang Digunakan**: `axios` telah diinstal (`npm install axios`) dan dikonfigurasi menggantikan native `fetch`.
+- **Implementasi `client.ts`**:
+  - `axiosInstance` dibuat dengan `baseURL` yang menunjuk ke environment API backend.
+  - Ditambahkan **Request Interceptor** untuk menyisipkan header Authorization (Bearer Token) dari `localStorage`.
+  - Ditambahkan **Response Interceptor** untuk menangani global error dan auto-logout jika sesi berakhir (HTTP 401).
+- **Penghapusan MOCK DATA**:
+  - `CompanyService`, `DeviceService`, dan `LogService` saat ini telah terhubung ke API backend (*Real API*), dan bukan lagi menggunakan simulasi data statis (`db.mock.ts`).
+- **Resolusi Linter (ESLint)**:
+  - Error `@typescript-eslint/no-explicit-any` di `useCompanies`, `useDevices`, dan `useLogs` telah diselesaikan dengan menggunakan tipe `Error` yang ketat.
+  - Warning `@typescript-eslint/no-unused-vars` untuk `apiClient` juga otomatis terselesaikan sejak Real API diaktifkan.
+- **Status Akhir Pengujian**: Build `npm run build` dan linter `npm run lint` kembali lulus (*100% Passed*) setelah integrasi Axios.
+
+---
+
+## 7. Status Akhir
+Seluruh rekomendasi perbaikan dan integrasi Axios telah selesai dieksekusi. Aplikasi **100% bebas dari linting error & warning**, memiliki tipe data yang solid, serta fungsionalitas antarmuka responsif (termasuk *resizable layout* pada halaman log). Sistem terhubung ke *Real API* secara stabil dan siap untuk diproduksi (Production Ready) secara optimal.

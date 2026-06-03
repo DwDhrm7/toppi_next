@@ -16,8 +16,8 @@ export default function CompanySummaryScreen() {
   const { logs } = useLogs();
 
   const company = companies.find((c) => c.name === companyName);
-  const companyDevices = devices.filter((d) => d.company === companyName);
-  const companyLogs = logs.filter((l) => l.company === companyName);
+  const companyDevices = devices.filter((d) => d.company?.name === companyName);
+  const companyLogs = logs.filter((l) => l.company?.name === companyName);
 
   if (!company && !isLoadingCompanies) {
     return (
@@ -54,7 +54,7 @@ export default function CompanySummaryScreen() {
             <div>
               <h2 className="text-xl font-bold text-gray-900">{company?.name || "Memuat..."}</h2>
               <span className="inline-flex items-center px-3 py-1 mt-1 rounded-full text-[11px] font-bold bg-green-50 text-green-600 border border-green-100">
-                {company?.status || "AKTIF"}
+                {"AKTIF"}
               </span>
             </div>
           </div>
@@ -100,7 +100,7 @@ export default function CompanySummaryScreen() {
                   )}
                   {companyDevices.map(d => (
                     <tr key={d.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-bold text-gray-800">{d.deviceId}</td>
+                      <td className="px-6 py-4 font-bold text-gray-800">{d.device_id}</td>
                       <td className="px-6 py-4 text-gray-600 font-medium">{d.name}</td>
                       <td className="px-6 py-4 text-gray-500">{d.type}</td>
                     </tr>
@@ -130,10 +130,10 @@ export default function CompanySummaryScreen() {
                   )}
                   {companyLogs.map(l => (
                     <tr key={l.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-bold text-gray-800">{l.deviceId}</td>
-                      <td className="px-6 py-4 text-gray-600 font-medium">{l.timestamp}</td>
+                      <td className="px-6 py-4 font-bold text-gray-800">{l.device_id}</td>
+                      <td className="px-6 py-4 text-gray-600 font-medium">{l.created_at}</td>
                       <td className="px-6 py-4">
-                        {l.status === "success" 
+                        {l.ocr 
                           ? <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-[#10B981]/10 text-[#10B981]">Berhasil</span>
                           : <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-[#EF4444]/10 text-[#EF4444]">Gagal</span>
                         }

@@ -1,37 +1,35 @@
-import { MOCK_DB } from "./db.mock";
+import { apiClient } from "./client";
+import { ENV } from "../env";
 
 export interface Company {
-  id: number;
-  name: string;
-  status: string;
-  date: string;
-  phone: string;
-  address: string;
+  id: string | number;
+  customer_number?: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+  status?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export const CompanyService = {
-  getCompanies: async (): Promise<Company[]> => {
-    return new Promise((resolve) => setTimeout(() => resolve([...MOCK_DB.companies]), 300));
+  getCompanies: async (params?: { page?: number; size?: number }): Promise<Company[]> => {
+    const res = await apiClient.get<any>(ENV.endpoints.company, params);
+    
+    if (Array.isArray(res)) return res;
+    if (res?.data && Array.isArray(res.data)) return res.data;
+    if (res?.data?.data && Array.isArray(res.data.data)) return res.data.data;
+    if (res?.data?.customers && Array.isArray(res.data.customers)) return res.data.customers;
+    
+    const possibleArray = Object.values(res?.data || {}).find(val => Array.isArray(val));
+    if (possibleArray) return possibleArray as Company[];
+    
+    return [];
   },
-  createCompany: async (company: Omit<Company, "id" | "date">): Promise<Company> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const newCompany: Company = {
-          ...company,
-          id: Math.max(...MOCK_DB.companies.map(c => c.id), 0) + 1,
-          date: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        };
-        MOCK_DB.companies.push(newCompany);
-        resolve(newCompany);
-      }, 300);
-    });
+  createCompany: async (company: Omit<Company, "id" | "created_at" | "updated_at">): Promise<Company> => {
+    return apiClient.post<Company>(ENV.endpoints.company, company);
   },
-  deleteCompany: async (id: number): Promise<void> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        MOCK_DB.companies = MOCK_DB.companies.filter(c => c.id !== id);
-        resolve();
-      }, 300);
-    });
+  deleteCompany: async (id: string | number): Promise<void> => {
+    return apiClient.delete<void>(`${ENV.endpoints.company}/${id}`);
   }
 };

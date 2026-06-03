@@ -12,6 +12,7 @@ export default function Navbar() {
   const [role, setRole] = useState("Superadmin");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     const initAuth = () => {
@@ -35,7 +36,7 @@ export default function Navbar() {
     { name: "Dashboard", path: "/dashboard" },
     { name: "TOPPI Log", path: "/toppi-log" },
     { name: "MQTT Log", path: "/mqtt-log" },
-    { name: "MQTT Export", path: "/mqtt-export" },
+    { name: "Mapping", path: "/mapping" },
     { 
       name: "More", 
       subItems: [
@@ -51,7 +52,7 @@ export default function Navbar() {
         <div className="flex justify-between h-[72px]">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center shrink-0 cursor-pointer">
-            <Image src="/assets/icon/toppi-black.png" alt="TOPPI Logo" width={80} height={28} className="h-[28px] w-auto object-contain hover:opacity-80 transition-opacity" />
+            <Image src="/assets/icon/toppi-black.png" alt="TOPPI Logo" width={80} height={28} className="h-[28px] w-auto object-contain hover:opacity-80 transition-opacity" style={{ width: 'auto' }} />
           </Link>
 
           {/* Desktop Nav */}
@@ -94,21 +95,60 @@ export default function Navbar() {
             })}
           </div>
 
-          {/* Right Side (User & Logout) */}
-          <div className="hidden md:flex items-center gap-5 shrink-0">
-            <div className="flex items-center gap-3">
+          {/* Right Side (User Profile Dropdown) */}
+          <div className="hidden md:flex items-center gap-5 shrink-0 relative">
+            <button 
+              onClick={() => setIsProfileOpen(!isProfileOpen)}
+              className="flex items-center gap-3 hover:bg-gray-50 p-1.5 pr-3 rounded-full transition-colors focus:outline-none"
+            >
               <div className="w-[38px] h-[38px] rounded-full bg-gradient-to-tr from-gray-100 to-white flex items-center justify-center shadow-inner border border-gray-200">
                 <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               </div>
-              <div className="flex flex-col items-start justify-center">
+              <div className="flex flex-col items-start justify-center text-left">
                 <span className="text-[13px] font-bold text-gray-800 leading-none mb-1">{username}</span>
                 <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider leading-none">{role}</span>
               </div>
-            </div>
-            <button onClick={logout}
-              className="bg-[#F97316] hover:bg-[#E85D04] text-white text-[13px] font-bold px-6 py-2.5 rounded-full transition-all duration-300 shadow-[0_4px_12px_-4px_rgba(249,115,22,0.4)] active:scale-[0.98]">
-              Keluar
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${isProfileOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
+
+            {/* Dropdown Menu */}
+            {isProfileOpen && (
+              <>
+                {/* Backdrop for closing */}
+                <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
+                <div className="absolute top-[56px] right-0 w-64 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden transform transition-all">
+                  <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100">
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">{username}</p>
+                  </div>
+                  
+                  <div className="p-2 border-b border-gray-100">
+                    {["RAW-DEV-V1", "RAW-PROD-V1", "RAW-STAG-V2", "RAW-PROD-V2"].map((acc) => (
+                      <button key={acc} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-gray-600 transition-colors text-left">
+                        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                        <span className="text-sm font-bold">{acc}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="p-2">
+                    <button 
+                      onClick={() => { setIsProfileOpen(false); window.location.reload(); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-gray-600 transition-colors text-left"
+                    >
+                      <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      <span className="text-sm font-bold">REFRESH PAGE</span>
+                    </button>
+                    <button 
+                      onClick={logout}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 text-red-600 transition-colors text-left mt-1"
+                    >
+                      <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                      <span className="text-sm font-bold">LOG OUT</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}

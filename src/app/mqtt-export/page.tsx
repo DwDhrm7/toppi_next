@@ -15,7 +15,7 @@ export default function MqttExportScreen() {
       return;
     }
     try {
-      const blob = await exportCsv({ from: dateFrom, to: dateTo });
+      const blob = await exportCsv({ type: 'mqtt-log', filterBy: 'date', from: dateFrom, to: dateTo });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

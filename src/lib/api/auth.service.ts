@@ -26,6 +26,6 @@ export interface AuthResponse {
 export const authService = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     // This connects to the backend
-    return apiClient.post<AuthResponse>(ENV.AUTH_ENDPOINT, credentials);
+    return apiClient.post<AuthResponse>(ENV.endpoints.auth, credentials);
   },
 };

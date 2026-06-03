@@ -1,23 +1,24 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import { useDevices } from "@/hooks/useDevices";
 import { useCompanies } from "@/hooks/useCompanies";
 
 function DeviceContent() {
-  const { devices, isLoading, deleteDevice, createDevice } = useDevices();
+  const { devices, isLoading, isCreating, isDeleting, deleteDevice, createDevice } = useDevices();
   const { companies } = useCompanies();
   const searchParams = useSearchParams();
   const companyQuery = searchParams.get("company");
+  const router = useRouter();
   
-  const filteredDevices = companyQuery ? devices.filter(d => d.company === companyQuery) : devices;
+  const filteredDevices = companyQuery ? devices.filter(d => d.company?.name === companyQuery) : devices;
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | number | null>(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newDevice, setNewDevice] = useState({ deviceId: "", name: "", type: "GTWY(0)", company: "" });
+  const [newDevice, setNewDevice] = useState({ deviceId: "", name: "", type: "GTWY(0)", company_id: "" });
 
   const handleDelete = async () => {
     if (selectedId && confirm("Apakah Anda yakin ingin menghapus perangkat ini?")) {
@@ -31,19 +32,19 @@ function DeviceContent() {
     if (!newDevice.deviceId || !newDevice.name) return;
     
     await createDevice({
-      deviceId: newDevice.deviceId,
+      device_id: newDevice.deviceId,
       name: newDevice.name,
       type: newDevice.type,
-      company: newDevice.company || "-",
-      fw: "1.0",
-      conn: "N/A",
-      pn: "1",
-      sn: "SN-NEW-001",
-      float: "0",
+      company_id: newDevice.company_id || "1",
+      version: 1,
+      connectivity: "N/A",
+      production_no: "1",
+      serial_no: `SN-NEW-${Math.floor(Math.random() * 1000)}`,
+      floating: "0",
       phone: "-",
     });
     setIsModalOpen(false);
-    setNewDevice({ deviceId: "", name: "", type: "GTWY(0)", company: "" });
+    setNewDevice({ deviceId: "", name: "", type: "GTWY(0)", company_id: "" });
   };
 
   return (
@@ -83,8 +84,8 @@ function DeviceContent() {
               <button className={`flex-1 lg:flex-none px-4 py-2.5 text-xs font-bold rounded-xl transition-colors ${selectedId ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
                 EDIT
               </button>
-              <button onClick={handleDelete} className={`flex-1 lg:flex-none px-4 py-2.5 text-xs font-bold rounded-xl transition-colors ${selectedId ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
-                DELETE
+              <button onClick={handleDelete} disabled={!selectedId || isDeleting} className={`flex-1 lg:flex-none px-4 py-2.5 text-xs font-bold rounded-xl transition-colors ${selectedId ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-gray-50 text-gray-400 cursor-not-allowed'} disabled:opacity-50`}>
+                {isDeleting ? 'DELETING...' : 'DELETE'}
               </button>
             </div>
           </div>
@@ -100,7 +101,22 @@ function DeviceContent() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {isLoading ? (
-                  <tr><td colSpan={12} className="px-6 py-12 text-center text-gray-400 font-medium">Memuat data...</td></tr>
+                  Array(5).fill(0).map((_, i) => (
+                    <tr key={`skeleton-${i}`} className="animate-pulse">
+                      <td className="px-6 py-5"><div className="h-4 w-6 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-24 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-32 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-20 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-16 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-8 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-12 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-12 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-24 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-10 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-20 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-5"><div className="h-4 w-32 bg-gray-200 rounded"></div></td>
+                    </tr>
+                  ))
                 ) : filteredDevices.length === 0 ? (
                   <tr><td colSpan={12} className="px-6 py-12 text-center text-gray-400 font-medium">Tidak ada perangkat ditemukan.</td></tr>
                 ) : (
@@ -108,17 +124,22 @@ function DeviceContent() {
                     <tr key={row.id} onClick={() => setSelectedId(row.id === selectedId ? null : row.id)} 
                         className={`cursor-pointer transition-colors ${selectedId === row.id ? "bg-orange-50/50 border-l-4 border-l-[#F97316]" : "hover:bg-gray-50"}`}>
                       <td className="px-6 py-5 text-gray-400 font-medium">{index + 1}</td>
-                      <td className="px-6 py-5 font-bold text-gray-800">{row.deviceId}</td>
+                      <td className="px-6 py-5 font-bold text-gray-800">{row.device_id}</td>
                       <td className="px-6 py-5 text-gray-700 font-semibold">{row.name}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.company}</td>
+                      <td 
+                        className="px-6 py-5 text-[#F97316] font-bold cursor-pointer hover:underline"
+                        onClick={(e) => { e.stopPropagation(); router.push(`/companies/${encodeURIComponent(row.company?.name || "")}`); }}
+                      >
+                        {row.company?.name || "-"}
+                      </td>
                       <td className="px-6 py-5 text-gray-500">{row.type}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.fw}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.conn}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.pn}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.sn}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.float}</td>
+                      <td className="px-6 py-5 text-gray-500">{row.version}</td>
+                      <td className="px-6 py-5 text-gray-500">{row.connectivity}</td>
+                      <td className="px-6 py-5 text-gray-500">{row.production_no}</td>
+                      <td className="px-6 py-5 text-gray-500">{row.serial_no}</td>
+                      <td className="px-6 py-5 text-gray-500">{row.floating}</td>
                       <td className="px-6 py-5 text-gray-500">{row.phone}</td>
-                      <td className="px-6 py-5 text-gray-500">{row.created}</td>
+                      <td className="px-6 py-5 text-gray-500">{row.created_at}</td>
                     </tr>
                   ))
                 )}
@@ -151,10 +172,10 @@ function DeviceContent() {
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase mb-1.5">Perusahaan</label>
-                <select value={newDevice.company} onChange={e => setNewDevice({...newDevice, company: e.target.value})} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10">
+                <select value={newDevice.company_id} onChange={e => setNewDevice({...newDevice, company_id: e.target.value})} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10">
                   <option value="">Pilih Perusahaan...</option>
                   {companies?.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -166,8 +187,10 @@ function DeviceContent() {
                 </select>
               </div>
               <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200 transition-colors">Batal</button>
-                <button type="submit" className="flex-1 py-3 rounded-xl bg-[#F97316] text-white font-bold text-sm hover:bg-[#E85D04] transition-colors shadow-sm">Simpan</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} disabled={isCreating} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200 transition-colors disabled:opacity-50">Batal</button>
+                <button type="submit" disabled={isCreating} className="flex-1 py-3 rounded-xl bg-[#F97316] text-white font-bold text-sm hover:bg-[#E85D04] transition-colors shadow-sm disabled:opacity-50">
+                  {isCreating ? 'Menyimpan...' : 'Simpan'}
+                </button>
               </div>
             </form>
           </div>

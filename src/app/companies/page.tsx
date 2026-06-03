@@ -6,7 +6,7 @@ import { useCompanies } from "@/hooks/useCompanies";
 import type { Company } from "@/lib/api/company.service";
 
 export default function CompaniesScreen() {
-  const { companies, isLoading, deleteCompany, createCompany } = useCompanies();
+  const { companies, isLoading, isCreating, isDeleting, deleteCompany, createCompany } = useCompanies();
   const [selected, setSelected] = useState<Company | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,7 +25,6 @@ export default function CompaniesScreen() {
     
     await createCompany({
       name: newCompany.name,
-      status: "POTENTIAL",
       phone: newCompany.phone || "-",
       address: newCompany.address || "-",
     });
@@ -49,7 +48,9 @@ export default function CompaniesScreen() {
             <div className="flex gap-2">
               <button onClick={() => setIsModalOpen(true)} className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-[11px] font-bold rounded-lg transition-colors shadow-sm">+ Add Data</button>
               <button className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold rounded-lg transition-colors shadow-sm cursor-not-allowed opacity-50">Edit</button>
-              <button onClick={handleDelete} disabled={!selected} className={`px-3 py-1.5 ${selected ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-300'} text-white text-[11px] font-bold rounded-lg transition-colors shadow-sm`}>Delete</button>
+              <button onClick={handleDelete} disabled={!selected || isDeleting} className={`px-3 py-1.5 ${selected ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-300'} text-white text-[11px] font-bold rounded-lg transition-colors shadow-sm disabled:opacity-50`}>
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
           
@@ -64,7 +65,13 @@ export default function CompaniesScreen() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {isLoading ? (
-                  <tr><td colSpan={3} className="px-6 py-12 text-center text-gray-400 font-medium">Memuat data...</td></tr>
+                  Array(5).fill(0).map((_, i) => (
+                    <tr key={`skeleton-${i}`} className="animate-pulse">
+                      <td className="px-6 py-4"><div className="h-4 w-32 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-4"><div className="h-6 w-16 bg-gray-200 rounded"></div></td>
+                      <td className="px-6 py-4"><div className="h-4 w-24 bg-gray-200 rounded"></div></td>
+                    </tr>
+                  ))
                 ) : companies.length === 0 ? (
                   <tr><td colSpan={3} className="px-6 py-12 text-center text-gray-400 font-medium">Tidak ada perusahaan.</td></tr>
                 ) : (
@@ -72,9 +79,11 @@ export default function CompaniesScreen() {
                     <tr key={row.id} onClick={() => setSelected(row)} className={`cursor-pointer transition-colors ${selected?.id === row.id ? "bg-orange-50/30" : "hover:bg-gray-50"}`}>
                       <td className="px-6 py-4 text-gray-700 font-medium">{row.name}</td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-3 py-1 rounded bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider">{row.status}</span>
+                        <span className={`inline-flex items-center px-3 py-1 rounded text-white text-[10px] font-bold uppercase tracking-wider ${row.status === 1 ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                          {row.status === 1 ? "AKTIF" : "NON-AKTIF"}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 text-gray-500 text-xs">{row.date}</td>
+                      <td className="px-6 py-4 text-gray-500 text-xs">{row.created_at}</td>
                     </tr>
                   ))
                 )}
@@ -101,7 +110,9 @@ export default function CompaniesScreen() {
               </div>
               <div>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">STATUS:</p>
-                <span className="inline-flex items-center px-3 py-1 rounded bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider">{selected.status}</span>
+                <span className={`inline-flex items-center px-3 py-1 rounded text-white text-[10px] font-bold uppercase tracking-wider ${selected.status === 1 ? 'bg-indigo-500' : 'bg-red-500'}`}>
+                  {selected.status === 1 ? "AKTIF" : "NON-AKTIF"}
+                </span>
               </div>
               <div>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">ADDRESS:</p>
@@ -149,8 +160,10 @@ export default function CompaniesScreen() {
                 <textarea rows={2} value={newCompany.address} onChange={e => setNewCompany({...newCompany, address: e.target.value})} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10" placeholder="Alamat lengkap..."></textarea>
               </div>
               <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200 transition-colors">Batal</button>
-                <button type="submit" className="flex-1 py-3 rounded-xl bg-[#F97316] text-white font-bold text-sm hover:bg-[#E85D04] transition-colors shadow-sm">Simpan</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} disabled={isCreating} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200 transition-colors disabled:opacity-50">Batal</button>
+                <button type="submit" disabled={isCreating} className="flex-1 py-3 rounded-xl bg-[#F97316] text-white font-bold text-sm hover:bg-[#E85D04] transition-colors shadow-sm disabled:opacity-50">
+                  {isCreating ? 'Menyimpan...' : 'Simpan'}
+                </button>
               </div>
             </form>
           </div>

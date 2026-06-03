@@ -13,14 +13,6 @@ export const useAuth = () => {
 
   const loginMutation = useMutation<AuthResponse, Error, LoginCredentials>({
     mutationFn: (credentials: LoginCredentials) => {
-      // MOCK logic specifically for the Demo login requirements without actually hitting API yet
-      if ((credentials.login === "admin@toppi.com" || credentials.login === "admin@demo.com") && credentials.password === "admin") {
-         return Promise.resolve({
-           fullname: "Admin Demo",
-           role: "Superadmin",
-           access_token: "mock-token-12345"
-         } as AuthResponse);
-      }
       return authService.login(credentials);
     },
     onSuccess: (data) => {

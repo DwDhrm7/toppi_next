@@ -32,6 +32,8 @@ export default function LoginScreen() {
           src="/assets/images/login-bg.png"
           alt="TOPPI Smart Water Meter"
           fill
+          priority
+          sizes="50vw"
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 hover:scale-105"
         />
         {/* Elegant overlay for better integration */}
@@ -51,6 +53,7 @@ export default function LoginScreen() {
               width={100}
               height={40}
               className="h-10 w-auto object-contain mb-8"
+              style={{ width: 'auto' }}
             />
             <h1 className="text-[2.25rem] font-bold text-gray-900 leading-tight tracking-tight mb-2">
               Masuk ke Dashboard

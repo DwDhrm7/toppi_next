@@ -1,18 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CompanyService } from "@/lib/api/company.service";
+import { toast } from "sonner";
 
 export const useCompanies = () => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["companies"],
-    queryFn: CompanyService.getCompanies,
+    queryFn: () => CompanyService.getCompanies(),
   });
 
   const createMutation = useMutation({
     mutationFn: CompanyService.createCompany,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["companies"] });
+      toast.success("Perusahaan berhasil ditambahkan");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Gagal menambahkan perusahaan");
     },
   });
 
@@ -20,7 +25,11 @@ export const useCompanies = () => {
     mutationFn: CompanyService.deleteCompany,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["companies"] });
+      toast.success("Perusahaan berhasil dihapus");
     },
+    onError: (error: Error) => {
+      toast.error(error.message || "Gagal menghapus perusahaan");
+    }
   });
 
   return {
