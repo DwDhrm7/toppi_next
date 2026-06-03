@@ -10,6 +10,88 @@ import { useDevices } from "@/hooks/useDevices";
 import { Log } from "@/lib/api/log.service";
 import { Suspense, useState, useEffect, useMemo } from "react";
 
+type SortField = "timestamp" | "battery1" | "battery2";
+type SortDirection = "asc" | "desc";
+
+const tableTimestampFormatter = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+const detailTimestampFormatter = new Intl.DateTimeFormat("id-ID", {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+function parseDateValue(value: unknown) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return null;
+
+  const normalizedValue = rawValue.replace(/(\.\d{3})\d+/, "$1");
+  const parsedDate = new Date(normalizedValue);
+
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
+function formatTableTimestamp(value: unknown) {
+  const parsedDate = parseDateValue(value);
+  if (!parsedDate) {
+    return { dateLabel: "-", timeLabel: "" };
+  }
+
+  const formatted = tableTimestampFormatter.formatToParts(parsedDate);
+  const dateLabel = `${formatted.find((part) => part.type === "day")?.value || ""} ${
+    formatted.find((part) => part.type === "month")?.value || ""
+  } ${formatted.find((part) => part.type === "year")?.value || ""}`.trim();
+  const timeLabel = `${formatted.find((part) => part.type === "hour")?.value || ""}:${
+    formatted.find((part) => part.type === "minute")?.value || ""
+  }`;
+
+  return { dateLabel, timeLabel };
+}
+
+function formatDetailTimestamp(value: unknown) {
+  const parsedDate = parseDateValue(value);
+  return parsedDate ? detailTimestampFormatter.format(parsedDate) : "-";
+}
+
+function getBatteryValue(value: unknown) {
+  const batteryValue = Number(value);
+  return Number.isFinite(batteryValue) ? batteryValue : Number.NEGATIVE_INFINITY;
+}
+
+function getCreatedAtTime(value: unknown) {
+  return parseDateValue(value)?.getTime() || 0;
+}
+
+function isRowSuccess(row: Partial<Log>) {
+  return Boolean(row.ocr && row.ocr !== "0" && Number(row.voltage_battery1) >= 3.0);
+}
+
+function SortIndicator({
+  active,
+  direction,
+}: {
+  active: boolean;
+  direction: SortDirection;
+}) {
+  return (
+    <span className={`inline-flex text-[10px] ${active ? "text-[#F97316]" : "text-gray-300"}`}>
+      {direction === "asc" ? "↑" : "↓"}
+    </span>
+  );
+}
+
 function ToppiLogContent() {
   const { republish, isRepublishing } = useMqtt();
   const searchParams = useSearchParams();
@@ -19,9 +101,9 @@ function ToppiLogContent() {
   const [endDate, setEndDate] = useState("");
   const [device, setDevice] = useState("Semua Perangkat");
   const [statusFilter, setStatusFilter] = useState("Semua Status");
-  
+  const [sortField, setSortField] = useState<SortField>("timestamp");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
-  
   const [debouncedSearch, setDebouncedSearch] = useState(companyParam);
 
   useEffect(() => {
@@ -34,11 +116,11 @@ function ToppiLogContent() {
 
   const searchParam = debouncedSearch || (device !== "Semua Perangkat" ? device : "");
 
-  const { logs: MOCK_DATA, paginate, isLoading } = useLogs({ 
-    page: currentPage, 
-    page_size: 10,
+  const { logs: MOCK_DATA, isLoading } = useLogs({
+    page: 1,
+    page_size: 1000,
     search: searchParam,
-    q: searchParam
+    q: searchParam,
   });
   const { devices } = useDevices();
   const router = useRouter();
@@ -50,6 +132,28 @@ function ToppiLogContent() {
     });
     return map;
   }, [devices]);
+
+  const installedDeviceCounts = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const matchingDeviceIds = new Set(
+      devices
+        .filter((deviceRow) => {
+          const matchSearch =
+            !normalizedSearch ||
+            deviceRow.device_id?.toLowerCase().includes(normalizedSearch) ||
+            deviceRow.company?.name?.toLowerCase().includes(normalizedSearch);
+
+          const matchDevice = device === "Semua Perangkat" || deviceRow.device_id === device;
+
+          return matchSearch && matchDevice && Boolean(deviceRow.device_id?.trim());
+        })
+        .map((deviceRow) => deviceRow.device_id as string)
+    );
+
+    return {
+      installedDevices: matchingDeviceIds.size,
+    };
+  }, [device, devices, searchQuery]);
 
   const logsWithCompany = useMemo(() => {
     return MOCK_DATA.map(log => {
@@ -77,40 +181,115 @@ function ToppiLogContent() {
     });
   }, [MOCK_DATA, deviceMap]);
 
-  const filteredData = logsWithCompany.filter((row: any) => {
+  const handleSortChange = (field: SortField) => {
+    setCurrentPage(1);
+    setSortDirection((currentDirection) => {
+      if (sortField === field) {
+        return currentDirection === "asc" ? "desc" : "asc";
+      }
+      return field === "timestamp" ? "desc" : "asc";
+    });
+    setSortField(field);
+  };
+
+  const baseFilteredData = logsWithCompany.filter((row: any) => {
     const matchSearch = row.device_id?.toLowerCase().includes(searchQuery.toLowerCase()) || 
       (row.company?.name && row.company.name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     let matchDate = true;
-    const rowDate = row.created_at?.split(" ")[0] || "";
-    if (startDate && rowDate < startDate) matchDate = false;
-    if (endDate && rowDate > endDate) matchDate = false;
-
-    const matchDevice = device === "Semua Perangkat" || row.device_id === device;
-
-    let matchStatus = true;
-    if (statusFilter !== "Semua Status") {
-      const isSuccess = Boolean(row.ocr && row.ocr !== "0" && Number(row.voltage_battery1) >= 3.0);
-      if (statusFilter === "Sukses") {
-        matchStatus = isSuccess;
-      } else if (statusFilter === "Gagal") {
-        matchStatus = !isSuccess;
-      }
+    const rowTime = getCreatedAtTime(row.created_at);
+    if (startDate) {
+      const startTime = new Date(`${startDate}T00:00:00`).getTime();
+      if (rowTime < startTime) matchDate = false;
+    }
+    if (endDate) {
+      const endTime = new Date(`${endDate}T23:59:59`).getTime();
+      if (rowTime > endTime) matchDate = false;
     }
 
-    return matchSearch && matchDate && matchDevice && matchStatus && Boolean(row.device_id && row.device_id.trim() !== "");
-  }).sort((a: any, b: any) => new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime());
+    const matchDevice = device === "Semua Perangkat" || row.device_id === device;
+    return matchSearch && matchDate && matchDevice && Boolean(row.device_id && row.device_id.trim() !== "");
+  });
+
+  const deviceStatusSummary = useMemo(() => {
+    const summary = new Map<string, { success: number; failed: number; aggregateStatus: "Sukses" | "Gagal" }>();
+
+    baseFilteredData.forEach((row: any) => {
+      const deviceId = row.device_id || "";
+      if (!deviceId) return;
+
+      const current = summary.get(deviceId) || { success: 0, failed: 0, aggregateStatus: "Sukses" as const };
+
+      if (isRowSuccess(row)) {
+        current.success += 1;
+      } else {
+        current.failed += 1;
+      }
+
+      current.aggregateStatus = current.failed > 0 ? "Gagal" : "Sukses";
+      summary.set(deviceId, current);
+    });
+
+    return summary;
+  }, [baseFilteredData]);
+
+  const statusCounts = useMemo(() => {
+    let successDevices = 0;
+    let failedDevices = 0;
+
+    deviceStatusSummary.forEach((summary) => {
+      if (summary.aggregateStatus === "Sukses") {
+        successDevices += 1;
+      } else {
+        failedDevices += 1;
+      }
+    });
+
+    return {
+      successDevices,
+      failedDevices,
+      totalDevices: deviceStatusSummary.size,
+    };
+  }, [deviceStatusSummary]);
+
+  const filteredData = useMemo(() => {
+    const statusScopedData = baseFilteredData.filter((row: any) => {
+      if (statusFilter === "Semua Status") return true;
+      return deviceStatusSummary.get(row.device_id || "")?.aggregateStatus === statusFilter;
+    });
+
+    const sortedRows = [...statusScopedData].sort((a: any, b: any) => {
+      if (sortField === "battery1") {
+        return sortDirection === "asc"
+          ? getBatteryValue(a.voltage_battery1) - getBatteryValue(b.voltage_battery1)
+          : getBatteryValue(b.voltage_battery1) - getBatteryValue(a.voltage_battery1);
+      }
+
+      if (sortField === "battery2") {
+        return sortDirection === "asc"
+          ? getBatteryValue(a.voltage_battery2) - getBatteryValue(b.voltage_battery2)
+          : getBatteryValue(b.voltage_battery2) - getBatteryValue(a.voltage_battery2);
+      }
+
+      return sortDirection === "asc"
+        ? getCreatedAtTime(a.created_at) - getCreatedAtTime(b.created_at)
+        : getCreatedAtTime(b.created_at) - getCreatedAtTime(a.created_at);
+    });
+
+    return sortedRows;
+  }, [baseFilteredData, deviceStatusSummary, sortDirection, sortField, statusFilter]);
 
   const DEVICES = ["Semua Perangkat", ...Array.from(new Set(devices.map(d => d.device_id || "").filter(Boolean)))];
 
   const itemsPerPage = 10;
-  const totalItems = paginate?.total ?? filteredData.length;
+  const totalItems = filteredData.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
-  const paginatedData = paginate ? filteredData : filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const [selected, setSelected] = useState<Log | null>(null);
+  const activeSelected = selected && filteredData.some((row: any) => row.id === selected.id) ? selected : null;
 
-  const selectedIndex = selected ? filteredData.findIndex((r: any) => r.id === selected.id) : -1;
+  const selectedIndex = activeSelected ? filteredData.findIndex((r: any) => r.id === activeSelected.id) : -1;
   const hasNext = selectedIndex >= 0 && selectedIndex < filteredData.length - 1;
   const hasPrev = selectedIndex > 0;
 
@@ -200,7 +379,10 @@ function ToppiLogContent() {
                 <input 
                   type="date" 
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="w-full sm:w-[140px] px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10 text-gray-600 bg-gray-50 hover:bg-white transition-all font-medium cursor-pointer" 
                   title="Start Date"
                 />
@@ -208,7 +390,10 @@ function ToppiLogContent() {
                 <input 
                   type="date" 
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="w-full sm:w-[140px] px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10 text-gray-600 bg-gray-50 hover:bg-white transition-all font-medium cursor-pointer" 
                   title="End Date"
                 />
@@ -218,7 +403,10 @@ function ToppiLogContent() {
                 <input 
                   list="devices-list"
                   value={device} 
-                  onChange={e => setDevice(e.target.value)}
+                  onChange={e => {
+                    setDevice(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Semua Perangkat"
                   className="w-full sm:w-[160px] border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-sm text-gray-600 focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10 cursor-pointer bg-gray-50 hover:bg-white font-medium transition-all"
                 />
@@ -231,16 +419,27 @@ function ToppiLogContent() {
               <div className="relative w-full sm:w-auto">
                 <select 
                   value={statusFilter} 
-                  onChange={e => setStatusFilter(e.target.value)}
+                  onChange={e => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="w-full sm:w-[160px] border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-sm text-gray-600 focus:outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/10 cursor-pointer bg-gray-50 hover:bg-white font-medium transition-all appearance-none"
                 >
-                  <option value="Semua Status">Semua Status</option>
-                  <option value="Sukses">Sukses</option>
-                  <option value="Gagal">Gagal</option>
+                  <option value="Semua Status">Semua Status ({statusCounts.totalDevices})</option>
+                  <option value="Sukses">Sukses ({statusCounts.successDevices})</option>
+                  <option value="Gagal">Gagal ({statusCounts.failedDevices})</option>
                 </select>
                 <svg className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
+          </div>
+
+          <div className="px-6 lg:px-8 py-3 border-b border-gray-100 bg-gray-50/40 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-gray-500">
+            <span>Total TOPPI terpasang: {installedDeviceCounts.installedDevices}</span>
+            <span className="text-sky-600">Muncul di log: {statusCounts.totalDevices}</span>
+            <span className="text-amber-600">Belum muncul di log: {Math.max(installedDeviceCounts.installedDevices - statusCounts.totalDevices, 0)}</span>
+            <span className="text-emerald-600">Sukses: {statusCounts.successDevices}</span>
+            <span className="text-red-600">Gagal: {statusCounts.failedDevices}</span>
           </div>
 
           <div className="overflow-x-auto flex-1">
@@ -252,9 +451,36 @@ function ToppiLogContent() {
                   <th className="px-6 py-4 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">COMPANY</th>
                   <th className="px-6 py-4 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">STATUS</th>
                   <th className="px-6 py-4 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">CONF.</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">BAT-1 (REGULAR)</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">BAT-2 (GATEWAY)</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">TIMESTAMP</th>
+                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-widest">
+                    <button
+                      type="button"
+                      onClick={() => handleSortChange("battery1")}
+                      className={`inline-flex items-center gap-1 ${sortField === "battery1" ? "text-[#F97316]" : "text-gray-400 hover:text-gray-600"}`}
+                    >
+                      <span>BAT-1 (REGULAR)</span>
+                      <SortIndicator active={sortField === "battery1"} direction={sortDirection} />
+                    </button>
+                  </th>
+                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-widest">
+                    <button
+                      type="button"
+                      onClick={() => handleSortChange("battery2")}
+                      className={`inline-flex items-center gap-1 ${sortField === "battery2" ? "text-[#F97316]" : "text-gray-400 hover:text-gray-600"}`}
+                    >
+                      <span>BAT-2 (GATEWAY)</span>
+                      <SortIndicator active={sortField === "battery2"} direction={sortDirection} />
+                    </button>
+                  </th>
+                  <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-widest">
+                    <button
+                      type="button"
+                      onClick={() => handleSortChange("timestamp")}
+                      className={`inline-flex items-center gap-1 ${sortField === "timestamp" ? "text-[#F97316]" : "text-gray-400 hover:text-gray-600"}`}
+                    >
+                      <span>TIMESTAMP</span>
+                      <SortIndicator active={sortField === "timestamp"} direction={sortDirection} />
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -278,8 +504,11 @@ function ToppiLogContent() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row: any, index: number) => (
-                    <tr key={row.id} onClick={() => setSelected(selected?.id === row.id ? null : row)} className={`cursor-pointer transition-colors ${selected?.id === row.id ? "bg-orange-50/50 border-l-4 border-l-[#F97316]" : "hover:bg-gray-50"}`}>
+                  paginatedData.map((row: any, index: number) => {
+                    const { dateLabel, timeLabel } = formatTableTimestamp(row.created_at);
+
+                    return (
+                    <tr key={row.id} onClick={() => setSelected(activeSelected?.id === row.id ? null : row)} className={`cursor-pointer transition-colors ${activeSelected?.id === row.id ? "bg-orange-50/50 border-l-4 border-l-[#F97316]" : "hover:bg-gray-50"}`}>
                       <td className="px-6 py-4 text-gray-400 font-medium">{((currentPage - 1) * itemsPerPage) + index + 1}</td>
                       <td className="px-6 py-4 font-bold text-gray-800">
                         <div className="flex items-center gap-2">
@@ -296,7 +525,7 @@ function ToppiLogContent() {
                         {row.company?.name || "-"}
                       </td>
                       <td className="px-6 py-4">
-                        {row.ocr && row.ocr !== "0" && Number(row.voltage_battery1) >= 3.0 ? (
+                        {deviceStatusSummary.get(row.device_id || "")?.aggregateStatus === "Sukses" ? (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
                             Sukses
                           </span>
@@ -309,9 +538,13 @@ function ToppiLogContent() {
                       <td className="px-6 py-4 font-bold text-emerald-600">{row.ocr_confidence ? (Number(row.ocr_confidence) * 100).toFixed(2) + "%" : "-"}</td>
                       <td className="px-6 py-4 text-gray-500 font-medium">{row.voltage_battery1 ? Number(row.voltage_battery1).toFixed(2) : "-"}</td>
                       <td className="px-6 py-4 text-gray-500 font-medium">{row.voltage_battery2 ? Number(row.voltage_battery2).toFixed(2) : "-"}</td>
-                      <td className="px-6 py-4 text-gray-400 text-xs">{row.created_at || "-"}</td>
+                      <td className="px-6 py-4 text-xs">
+                        <div className="font-semibold text-gray-700">{dateLabel}</div>
+                        <div className="text-gray-400">{timeLabel || "-"}</div>
+                      </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -345,7 +578,7 @@ function ToppiLogContent() {
         </div>
 
         {/* Draggable Divider (visible on desktop only) */}
-        {selected && (
+        {activeSelected && (
           <div 
             onMouseDown={handleMouseDown}
             className="hidden lg:flex items-center justify-center w-6 cursor-col-resize select-none group self-stretch py-2 z-20"
@@ -359,7 +592,7 @@ function ToppiLogContent() {
         )}
 
         {/* Right Detail Panel */}
-        {selected ? (
+        {activeSelected ? (
           <div 
             className="bg-white rounded-3xl shadow-sm border border-gray-200/60 overflow-hidden flex flex-col min-w-0"
             style={{ width: isDesktop ? `calc(${100 - leftWidth}% - 12px)` : "100%" }}
@@ -384,10 +617,10 @@ function ToppiLogContent() {
                   </button>
                 </div>
                 <button className="px-3 py-1.5 bg-transparent text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-50 transition-colors uppercase">DELETE</button>
-                <button 
-                  onClick={async () => {
-                    if (selected.device_id) {
-                      const res = await republish(selected.device_id);
+                    <button 
+                      onClick={async () => {
+                    if (activeSelected.device_id) {
+                      const res = await republish(activeSelected.device_id);
                       alert(res.message);
                     }
                   }}
@@ -404,12 +637,12 @@ function ToppiLogContent() {
               {/* Capture Result Placeholder */}
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">CAPTURE RESULT</p>
-                {selected.image ? (
+                {activeSelected.image ? (
                   <div className="w-full h-[180px] rounded-2xl overflow-hidden relative shadow-inner bg-black flex justify-center">
                     <Zoom>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
-                        src={selected.image} 
+                        src={activeSelected.image} 
                         alt="Water Meter Capture" 
                         className="object-contain w-full h-[180px]"
                       />
@@ -425,18 +658,18 @@ function ToppiLogContent() {
 
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">DEVICE ID</p><p className="font-extrabold text-gray-900 text-[13px]">{selected.device_id}</p></div>
-                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">TYPE / MODEL</p><p className="font-extrabold text-gray-900 text-[13px]">{selected.model || "Onda"}</p></div>
-                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">TIMESTAMP</p><p className="font-bold text-gray-900 text-[11px] break-all pr-2">{(selected as any).timestamp || selected.created_at || "-"}</p></div>
-                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">SYS. ENTRY</p><p className="font-bold text-gray-900 text-[11px] break-all">{selected.created_at || "-"}</p></div>
+                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">DEVICE ID</p><p className="font-extrabold text-gray-900 text-[13px]">{activeSelected.device_id}</p></div>
+                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">TYPE / MODEL</p><p className="font-extrabold text-gray-900 text-[13px]">{activeSelected.model || "Onda"}</p></div>
+                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">TIMESTAMP</p><p className="font-bold text-gray-900 text-[11px] pr-2">{formatDetailTimestamp((activeSelected as any).timestamp || activeSelected.created_at)}</p></div>
+                <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">SYS. ENTRY</p><p className="font-bold text-gray-900 text-[11px]">{formatDetailTimestamp(activeSelected.created_at)}</p></div>
               </div>
 
               {/* OCR Detail */}
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">OCR DETAILS</p>
                 <div className="grid grid-cols-2 gap-y-4 gap-x-2 bg-[#F9FAFB] rounded-[20px] p-4">
-                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">OCR VALUE</p><p className="font-extrabold text-gray-900 text-[13px]">{selected.ocr || "-"}</p></div>
-                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">OCR CONF.</p><p className="font-extrabold text-emerald-500 text-[13px]">{selected.ocr_confidence ? (Number(selected.ocr_confidence) * 100).toFixed(2) + "%" : "-"}</p></div>
+                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">OCR VALUE</p><p className="font-extrabold text-gray-900 text-[13px]">{activeSelected.ocr || "-"}</p></div>
+                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">OCR CONF.</p><p className="font-extrabold text-emerald-500 text-[13px]">{activeSelected.ocr_confidence ? (Number(activeSelected.ocr_confidence) * 100).toFixed(2) + "%" : "-"}</p></div>
                   <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">AREA</p><p className="font-extrabold text-gray-900 text-[13px]">[ 0, 0, 0, 0 ]</p></div>
                   <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">ROTATION</p><p className="font-extrabold text-gray-900 text-[13px]">0°</p></div>
                 </div>
@@ -446,9 +679,9 @@ function ToppiLogContent() {
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">TELEMETRY</p>
                 <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">VOLTAGE BAT 1</p><p className="font-extrabold text-gray-900 text-[13px]">{selected.voltage_battery1 ? Number(selected.voltage_battery1).toFixed(2) : "-"}</p></div>
-                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">VOLTAGE BAT 2</p><p className="font-extrabold text-gray-900 text-[13px]">{selected.voltage_battery2 ? Number(selected.voltage_battery2).toFixed(2) : "-"}</p></div>
-                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">TEMPERATURE</p><p className="font-extrabold text-gray-900 text-[13px]">{selected.temperature !== undefined && selected.temperature !== null ? `${selected.temperature} °C` : "-"}</p></div>
+                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">VOLTAGE BAT 1</p><p className="font-extrabold text-gray-900 text-[13px]">{activeSelected.voltage_battery1 ? Number(activeSelected.voltage_battery1).toFixed(2) : "-"}</p></div>
+                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">VOLTAGE BAT 2</p><p className="font-extrabold text-gray-900 text-[13px]">{activeSelected.voltage_battery2 ? Number(activeSelected.voltage_battery2).toFixed(2) : "-"}</p></div>
+                  <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">TEMPERATURE</p><p className="font-extrabold text-gray-900 text-[13px]">{activeSelected.temperature !== undefined && activeSelected.temperature !== null ? `${activeSelected.temperature} °C` : "-"}</p></div>
                   <div><p className="text-[10px] text-gray-400 font-bold uppercase mb-1">FIRMWARE</p><p className="font-extrabold text-gray-900 text-[13px]">2.20</p></div>
                 </div>
               </div>
